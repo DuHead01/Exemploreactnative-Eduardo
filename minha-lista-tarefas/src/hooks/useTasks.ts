@@ -60,6 +60,7 @@ export function useTasks() {
     filter,
     loading,
     setFilter,
+    refreshTasks: loadTasks,
     toggleTask,
     removeTask,
   };
