@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { createTask } from "./src/database/taskRepository";
 import { useTasks } from "./src/hooks/useTasks";
-import { TaskFilter } from "./src/types/task";
+import { Task, TaskFilter } from "./src/types/task";
 
 const FILTERS: Array<{ key: TaskFilter; label: string }> = [
   { key: "all", label: "Todas" },
@@ -225,6 +229,82 @@ const styles = StyleSheet.create({
     color: "#fda4af",
     fontWeight: "700",
   },
+  taskActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editButton: {
+    borderRadius: 12,
+    backgroundColor: "rgba(99, 102, 241, 0.16)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editText: {
+    color: "#c7d2fe",
+    fontWeight: "700",
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: "rgba(2, 6, 23, 0.78)",
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 24,
+    padding: 22,
+    backgroundColor: "#0f172a",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  modalMessage: {
+    color: "#cbd5e1",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 10,
+  },
+  modalTaskTitle: {
+    color: "#fda4af",
+    fontWeight: "700",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 24,
+  },
+  modalButton: {
+    minWidth: 104,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: "#475569",
+    backgroundColor: "#1e293b",
+  },
+  modalCancelText: {
+    color: "#e2e8f0",
+    fontWeight: "700",
+  },
+  modalConfirmButton: {
+    backgroundColor: "#e11d48",
+  },
+  modalConfirmText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
   emptyState: {
     borderRadius: 20,
     borderWidth: 1,
@@ -241,8 +321,11 @@ const styles = StyleSheet.create({
 });
 
 export default function App() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const {
     tasks,
@@ -269,6 +352,21 @@ export default function App() {
     setTitle("");
     setDescription("");
     await refreshTasks();
+  }
+
+  async function handleConfirmDelete() {
+    if (!taskToDelete || deleting) return;
+
+    setDeleting(true);
+    try {
+      await removeTask(taskToDelete.id);
+      setTaskToDelete(null);
+    } catch (error) {
+      console.error("Erro ao excluir tarefa:", error);
+      Alert.alert("Erro ao excluir", "Não foi possível excluir esta tarefa.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -428,13 +526,31 @@ export default function App() {
                 ) : null}
               </Pressable>
 
-              <Pressable
-                onPress={() => void removeTask(item.id)}
-                hitSlop={8}
-                style={styles.deleteButton}
-              >
-                <Text style={styles.deleteText}>Excluir</Text>
-              </Pressable>
+              <View style={styles.taskActions}>
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/form",
+                      params: { id: String(item.id) },
+                    })
+                  }
+                  hitSlop={8}
+                  style={styles.editButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Editar tarefa ${item.title}`}
+                >
+                  <Text style={styles.editText}>Editar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setTaskToDelete(item)}
+                  hitSlop={8}
+                  style={styles.deleteButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Excluir tarefa ${item.title}`}
+                >
+                  <Text style={styles.deleteText}>Excluir</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         )}
@@ -446,6 +562,54 @@ export default function App() {
           </View>
         }
       />
+      <Modal
+        visible={taskToDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deleting) setTaskToDelete(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={styles.modalCard}
+            accessibilityRole="alert"
+            accessibilityViewIsModal
+          >
+            <Text style={styles.modalTitle}>Excluir tarefa?</Text>
+            <Text style={styles.modalMessage}>
+              Tem certeza de que deseja excluir{" "}
+              <Text style={styles.modalTaskTitle}>
+                {taskToDelete ? `“${taskToDelete.title}”` : "esta tarefa"}
+              </Text>
+              ? Esta ação não pode ser desfeita.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setTaskToDelete(null)}
+                disabled={deleting}
+                style={[styles.modalButton, styles.modalCancelButton]}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void handleConfirmDelete()}
+                disabled={deleting}
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                accessibilityRole="button"
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>Excluir</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <StatusBar style="light" />
     </View>
   );
